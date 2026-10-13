@@ -1,0 +1,133 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# Build the example app into an installable APK.
+#
+# Triggers:
+#   - Manual run (Actions → Build APK → Run workflow), with build type and per-ABI split options.
+#   - Pushing a v* tag also attaches the APKs to a GitHub Release.
+#
+# Signing: if the ANDROID_KEYSTORE_BASE64, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD and
+# ANDROID_STORE_PASSWORD secrets are set (keystore base64-encoded, e.g. `base64 -w0 my-release-key.jks`),
+# the release APK is signed with that keystore. Otherwise an ephemeral CI keystore is generated so the
+# APK is still installable — self-signed, fine for personal installs but not for Play Store upload.
+
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: Build type
+        type: choice
+        default: release
+        options: [release, debug]
+      split_apk:
+        description: Split APKs per ABI (smaller download, one per device ABI)
+        type: boolean
+        default: false
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: example
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # The example's build.gradle reads signing config from key.properties (storeFile is relative to
+      # example/android). Without it a release build would come out unsigned and un-installable, so fall
+      # back to generating a throwaway keystore. Debug builds ignore this and use the default debug key.
+      - name: Set up signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          cd android
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+            {
+              echo "storeFile=keystore.jks"
+              echo "storePassword=$STORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > key.properties
+            echo "Using keystore from ANDROID_KEYSTORE_BASE64 secret"
+          else
+            keytool -genkeypair -v -keystore keystore.jks -alias yolo-ci \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=YOLO Example CI, OU=CI, O=Ultralytics, L=San Francisco, S=California, C=US"
+            {
+              echo "storeFile=keystore.jks"
+              echo "storePassword=android"
+              echo "keyAlias=yolo-ci"
+              echo "keyPassword=android"
+            } > key.properties
+            echo "No signing secrets set — generated an ephemeral CI keystore"
+          fi
+
+      - name: Extract app version
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//; s/+.*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK
+        run: >
+          flutter build apk
+          --${{ inputs.build_type || 'release' }}
+          ${{ inputs.split_apk == true && '--split-per-abi' || '' }}
+
+      - name: Collect APKs
+        run: |
+          mkdir -p ../apk-output
+          for apk in build/app/outputs/flutter-apk/*.apk; do
+            base=$(basename "$apk" .apk)
+            case "$base" in
+              app-release | app-debug) abi="universal" ;;
+              *) abi=$(echo "$base" | sed -E 's/^app-(.+)-(release|debug)$/\1/') ;;
+            esac
+            kind=${base##*-}
+            cp "$apk" "../apk-output/ultralytics-yolo-example-v${{ steps.version.outputs.version }}-${abi}-${kind}.apk"
+          done
+          ls -la ../apk-output
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ultralytics-yolo-example-apk
+          path: apk-output/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "Example APK $GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" ../apk-output/*.apk --clobber
