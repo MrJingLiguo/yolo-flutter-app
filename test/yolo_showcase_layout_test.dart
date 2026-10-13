@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ultralytics_yolo/widgets/camera_toolbar.dart';
 import 'package:ultralytics_yolo/widgets/lens_picker.dart';
+import 'package:ultralytics_yolo/widgets/logo_overlay.dart';
 import 'package:ultralytics_yolo/widgets/yolo_controller.dart';
 import 'package:ultralytics_yolo/widgets/yolo_showcase.dart';
 import 'package:ultralytics_yolo/yolo.dart';
@@ -38,6 +39,22 @@ void main() {
 
     expect(toolbarRect.left, 0);
     expect(toolbarRect.width, 900);
+  });
+
+  testWidgets('showLogo defaults to visible and hides when false', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(390, 780));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YOLOShowcase()));
+    expect(find.byType(LogoOverlay), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: YOLOShowcase(showLogo: false)),
+    );
+    expect(find.byType(LogoOverlay), findsNothing);
   });
 
   testWidgets('showcase controls drive the camera controller', (tester) async {

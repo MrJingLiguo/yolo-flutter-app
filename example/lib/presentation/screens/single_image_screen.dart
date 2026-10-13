@@ -89,7 +89,16 @@ class _SingleImageScreenState extends State<SingleImageScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Single Image Inference')),
+      appBar: AppBar(
+        title: const Text('Single Image Inference'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'Imported models',
+            onPressed: () => Navigator.pushNamed(context, '/models'),
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           Column(

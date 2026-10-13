@@ -37,6 +37,9 @@ class YOLOShowcase extends StatefulWidget {
   /// When `false`, the Semantic task chip is hidden for hosts that do not want to expose semantic segmentation.
   final bool showSemanticTask;
 
+  /// When `false`, the Ultralytics logotype overlay is hidden. Defaults to `true`.
+  final bool showLogo;
+
   /// Invoked with a composited JPEG when the user taps the share button.
   final void Function(Uint8List bytes)? onCapture;
 
@@ -55,6 +58,7 @@ class YOLOShowcase extends StatefulWidget {
     this.initialTask = YOLOTask.detect,
     this.initialModelSize = 'n',
     this.showSemanticTask = true,
+    this.showLogo = true,
     this.onCapture,
     this.controller,
     this.theme,
@@ -693,11 +697,12 @@ class _YOLOShowcaseState extends State<YOLOShowcase> {
                 ),
                 // Ultralytics logotype, bottom-right — matches `Main.storyboard` logoImage (frame x215 y625 w159 h67
                 // on a 393x852 canvas, anchored bottom-right ~19pt from the edge, sitting above the toolbar).
-                Positioned(
-                  right: 19,
-                  bottom: isLandscape ? 100 : 160,
-                  child: const LogoOverlay(width: 159),
-                ),
+                if (widget.showLogo)
+                  Positioned(
+                    right: 19,
+                    bottom: isLandscape ? 100 : 160,
+                    child: const LogoOverlay(width: 159),
+                  ),
                 Positioned.fill(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),

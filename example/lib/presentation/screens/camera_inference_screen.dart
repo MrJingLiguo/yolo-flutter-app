@@ -4,15 +4,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 /// Real-time YOLO camera inference. Thin shell over [YOLOShowcase] that wires the capture callback to the platform
-/// share sheet via `share_plus` and stamps the live app version in the bottom-left (matching `yolo-ios-app`). Kept
-/// intentionally bare so the screen reads side-by-side with `yolo-ios-app`'s `ViewController` — no extra Material
-/// chrome on top.
+/// share sheet via `share_plus`, hides the plugin's Ultralytics logotype overlay, and adds the model-import entry
+/// point in the top-left corner (the showcase's own controls are centered, so the corner is free).
 class CameraInferenceScreen extends StatefulWidget {
   const CameraInferenceScreen({super.key});
 
@@ -21,21 +19,6 @@ class CameraInferenceScreen extends StatefulWidget {
 }
 
 class _CameraInferenceScreenState extends State<CameraInferenceScreen> {
-  String? _versionLabel;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadVersion();
-  }
-
-  Future<void> _loadVersion() async {
-    final info = await PackageInfo.fromPlatform();
-    if (!mounted) return;
-    // Match yolo-ios-app's `labelVersion`: "v<version> (<build>)".
-    setState(() => _versionLabel = 'v${info.version} (${info.buildNumber})');
-  }
-
   Future<void> _onCapture(Uint8List bytes) async {
     // Capture the share-sheet anchor BEFORE any async gap (no BuildContext use after await). iOS 26 gives the activity
     // controller a popoverPresentationController even on iPhone; without a valid source rect the popover anchors at
@@ -61,7 +44,25 @@ class _CameraInferenceScreenState extends State<CameraInferenceScreen> {
   Widget build(BuildContext context) {
     // Show all 7 tasks (Detect / Segment / Semantic / Depth / Classify / Pose / OBB) to match the iOS app's task control.
     return Scaffold(
-      body: YOLOShowcase(versionLabel: _versionLabel, onCapture: _onCapture),
+      body: Stack(
+        children: [
+          YOLOShowcase(showLogo: false, onCapture: _onCapture),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8, top: 8),
+                child: IconButton(
+                  icon: const Icon(Icons.folder_open),
+                  color: Colors.white70,
+                  tooltip: 'Imported models',
+                  onPressed: () => Navigator.pushNamed(context, '/models'),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
